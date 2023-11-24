@@ -1,0 +1,53 @@
+EXP:
+    ID: MITIndoor67
+    OUTPUT_DIR: Results
+
+DATASET:
+    NAME: MITIndoor67
+    ROOT: ./Data/Datasets/Data_Case/7/
+    SCENE_LABELS: ./Data/Datasets/MITIndoor67/scene_names.txt
+    SEM_LABELS: ./Data/Datasets/ADEChallengeData2016/objectInfo150.txt
+    N_CLASSES_SCENE: 67
+    N_CLASSES_SEM: 151
+
+DATALOADER:
+    NUM_WORKERS: 0
+
+MODEL:
+    ARCH: ResNet-18
+    PATH: ./Data/Model Zoo/MITIndoor67/
+    NAME: SAScene_ResNet18_Places.pth
+    ONLY_RGB: FALSE
+    ONLY_SEM: FALSE
+    SAVE_PATH: ./MODEL/
+    NAME_BACKUP: SAScene_ResNet18_Places.pth
+
+TRAINING:
+    PRINT_FREQ: 10
+    PRECOMPUTED_SEM: TRUE
+    BATCH_SIZE:
+        TRAIN: 10
+        VAL: 10
+    LR: 2.5e-2
+    LR_DECAY: 10
+    MOMENTUM: 0.9
+    OPTIMIZER: DFW
+    POLY_POWER: 0.9
+    WEIGHT_DECAY: 5.0e-4
+    AVERAGE_LOSS: 20
+    EPOCHS: 100
+
+VALIDATION:
+    PRINT_FREQ: 134
+    BATCH_SIZE:
+        TRAIN: 50
+        VAL: 50
+    TEN_CROPS: FALSE
+
+
+TEST:
+    PRINT_FREQ: 134
+    BATCH_SIZE:
+        TRAIN: 50
+        TEST: 50
+    TEN_CROPS: FALSE
