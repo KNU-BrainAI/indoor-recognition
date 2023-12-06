@@ -56,9 +56,7 @@ def train(dataloader, model, optimizer, scheduler= None, device = 'cuda'):
     ClassTPs_Top2 = torch.zeros(1, len(classes), dtype=torch.uint8).cuda()
     ClassTPs_Top5 = torch.zeros(1, len(classes), dtype=torch.uint8).cuda()
     
-    best_val_acc = 0
     best_val_loss = 100
-    best_test_loss = 100
 
     best_model = None
     model.to(device)
@@ -122,7 +120,6 @@ def train(dataloader, model, optimizer, scheduler= None, device = 'cuda'):
             scheduler.step(_val_top1)
             print("Adjust step")
         if best_val_loss > _val_loss:
-            best_val_acc = _val_top1
             best_val_loss = _val_loss
             best_model = {
                 'state_dict': model.state_dict(),
@@ -130,26 +127,15 @@ def train(dataloader, model, optimizer, scheduler= None, device = 'cuda'):
                 'optimizer_state_dict': optimizer.state_dict(),
                 'epoch': epoch
             }
-            torch.save(best_model, f'./output/kfold/{label}/model_epoch_{epoch}_case_{label}_val.pth')
-            flag = 1
             patient = 0
         else:
             patient+=1
-        if best_test_loss > _test_loss:
-            best_test_acc = _test_top1
-            best_test_loss = _test_loss
-            best_model = {
-                'state_dict': model.state_dict(),
-                'arch': model.__class__.__name__,
-                'optimizer_state_dict': optimizer.state_dict(),
-                'epoch': epoch
-            }
-            if flag !=1:
-                torch.save(best_model, f'./output/kfold/{label}/model_epoch_{epoch}_case_{label}_test.pth')
-        flag = 0
+
+        if patient == 20:
+            break
 
 
-        with open(f"output/kfold/{label}/output.txt", "a") as f:
+        with open(f"output/output.txt", "a") as f:
             f.write(f'Epoch {epoch} Train Loss {_train_loss:.5f} Train ACC {top1.avg:.5f}\n')
             f.write(f'Epoch {epoch} Val Loss {_val_loss:.5f} Val ACC {_val_top1:.5f}\n')
             f.write(f'Epoch {epoch} Test Loss {_test_loss:.5f} Test ACC {_test_top1:.5f}\n')
@@ -176,7 +162,6 @@ def validation(dataloader, model, set):
     batch_size = CONFIG['VALIDATION']['BATCH_SIZE']['VAL']
 
     # Start data time
-    data_time_start = time.time()
 
     with torch.no_grad():
         for i, (mini_batch) in enumerate(dataloader):
@@ -224,8 +209,6 @@ def validation(dataloader, model, set):
         ClassTPDic = {'Top1': ClassTPs_Top1.cpu().numpy(),
                       'Top2': ClassTPs_Top2.cpu().numpy(), 'Top5': ClassTPs_Top5.cpu().numpy()}
 
-        #print('Elapsed time for {} set evaluation {time:.3f} seconds'.format(set, time=time.time() - data_time_start))
-        #print("")
 
         return top1.avg, top2.avg, top5.avg, losses.avg, ClassTPDic
 
@@ -323,6 +306,7 @@ def initial_setting():
     model = SASceneNet(arch=CONFIG['MODEL']['ARCH'], scene_classes=CONFIG['DATASET']['N_CLASSES_SCENE'], semantic_classes=CONFIG['DATASET']['N_CLASSES_SEM'])
 
     # Load the trained model + use place365 and finetuning
+    """
     completePath = CONFIG['MODEL']['PATH'] + 'SAScene_ResNet18_MIT.pth.tar'
     if os.path.isfile(completePath):
         print("Loading model {} from path {}...".format(CONFIG['MODEL']['NAME'], completePath))
@@ -335,7 +319,7 @@ def initial_setting():
     else:
         print("No checkpoint found at '{}'. Check configuration file MODEL field".format(completePath))
         quit()
-
+    """
     model.in_block_sem = nn.Sequential(
                 nn.Conv2d(150, 64, kernel_size=7, stride=2, padding=3, bias=False),
                 nn.BatchNorm2d(64),
@@ -379,111 +363,109 @@ def initial_setting():
     print('Loading dataset {}...'.format(CONFIG['DATASET']['NAME']))
     return model, model2, device, USE_CUDA
 
-#initial_dataloader에서 label 정의후 case 쭉 돌리기.
-def initial_dataloader(label): 
+def initial_dataloader(): 
     #데이터 경로
     # \Data\Datasets\Data_Case\1
     datadir = CONFIG['DATASET']['ROOT']
 
-    train_dataset = CustomDataset(datadir, str(label) + "/train")
+    train_dataset = CustomDataset(datadir, "/train")
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=CONFIG['TRAINING']['BATCH_SIZE']['TRAIN'],
                                                 shuffle=False, num_workers=0, pin_memory=True)
 
-    val_dataset = CustomDataset(datadir, str(label) + "/val", tencrops=CONFIG['VALIDATION']['TEN_CROPS'], SemRGB=True)
+    val_dataset = CustomDataset(datadir, "/val", tencrops=CONFIG['VALIDATION']['TEN_CROPS'], SemRGB=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], shuffle=False,
                                                 num_workers=0, pin_memory=True)
     
-    test_dataset = CustomDataset(datadir, str(label) + "/test")
+    test_dataset = CustomDataset(datadir, "/test")
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=CONFIG['TEST']['BATCH_SIZE']['TEST'], shuffle=False,
                                                num_workers=0,pin_memory=True)
     
     return train_dataset, train_loader, val_dataset, val_loader, test_dataset, test_loader
 
-for label in range(1,7):
-    train_acc_list = []
-    train_loss_list = []
-    val_acc_list = []
-    val_loss_list = []
-    test_acc_list = []
-    test_loss_list = []
-    model, model2, device, USE_CUDA = initial_setting()
-    train_dataset, train_loader, val_dataset, val_loader, test_dataset, test_loader = initial_dataloader(label)
+train_acc_list = []
+train_loss_list = []
+val_acc_list = []
+val_loss_list = []
+test_acc_list = []
+test_loss_list = []
+model, model2, device, USE_CUDA = initial_setting()
+train_dataset, train_loader, val_dataset, val_loader, test_dataset, test_loader = initial_dataloader()
 
-    data_root = CONFIG['DATASET']['ROOT']
+data_root = CONFIG['DATASET']['ROOT']
 
-    print(f'data_root: {data_root}')
-    classes = train_dataset.classes
+classes = train_dataset.classes
 
-    # Print dataset information
-    print('Dataset loaded!')
-    print('Dataset Information:')
-    print('Train set. Size {}. Batch size {}. Nbatches {}'
-        .format(len(train_loader) * CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'], CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'], len(train_loader)))
-    print('Validation set. Size {}. Batch size {}. Nbatches {}'
-        .format(len(val_loader) * CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], len(val_loader)))
-    print('Test set. Size {}. Batch size {}. Nbatches {}'
-        .format(len(test_loader) * CONFIG['TEST']['BATCH_SIZE']['TEST'], CONFIG['TEST']['BATCH_SIZE']['TEST'], len(val_loader)))
-    print('Train set number of scenes: {}' .format(len(classes)))
-    print('Validation set number of scenes: {}' .format(len(classes)))
-    print('Test set number of scenes: {}' .format(len(classes)))
+# Print dataset information
+print('Dataset loaded!')
+print('Dataset Information:')
+print('Train set. Size {}. Batch size {}. Nbatches {}'
+    .format(len(train_loader) * CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'], CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'], len(train_loader)))
+print('Validation set. Size {}. Batch size {}. Nbatches {}'
+    .format(len(val_loader) * CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], len(val_loader)))
+print('Test set. Size {}. Batch size {}. Nbatches {}'
+    .format(len(test_loader) * CONFIG['TEST']['BATCH_SIZE']['TEST'], CONFIG['TEST']['BATCH_SIZE']['TEST'], len(val_loader)))
+print('Train set number of scenes: {}' .format(len(classes)))
+print('Validation set number of scenes: {}' .format(len(classes)))
+print('Test set number of scenes: {}' .format(len(classes)))
 
-    print('-' * 65)
+print('-' * 65)
 
-    print('Computing histogram of scene classes...')
+print('Computing histogram of scene classes...')
 
-    # Check if OUTPUT_DIR exists and if not create it
-    if not os.path.exists(CONFIG['EXP']['OUTPUT_DIR']):
-        os.makedirs(CONFIG['EXP']['OUTPUT_DIR'])
+# Check if OUTPUT_DIR exists and if not create it
+if not os.path.exists(CONFIG['EXP']['OUTPUT_DIR']):
+    os.makedirs(CONFIG['EXP']['OUTPUT_DIR'])
 
-    # Print Network information
-    print('-' * 65)
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    print('Number of params: {}'. format(params))
-    print('-' * 65)
-    print('GPU in use: {} with {} memory'.format(torch.cuda.get_device_name(0), torch.cuda.max_memory_allocated(0)))
-    print('-' * 65)
+# Print Network information
+print('-' * 65)
+model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+params = sum([np.prod(p.size()) for p in model_parameters])
+print('Number of params: {}'. format(params))
+print('-' * 65)
+print('GPU in use: {} with {} memory'.format(torch.cuda.get_device_name(0), torch.cuda.max_memory_allocated(0)))
+print('-' * 65)
 
-    # Summary of the network for a dummy input
-    sample = next(iter(val_loader))
-    torchsummary.summary(model, [(3, 224, 224), (150, 224, 224)], batch_size=CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'])
+# Summary of the network for a dummy input
+sample = next(iter(val_loader))
+torchsummary.summary(model, [(3, 224, 224), (150, 224, 224)], batch_size=CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'])
 
-    print('Evaluating dataset ...')
+print('Evaluating dataset ...')
 
-    #optimizer = torch.optim.Adagrad(model.parameters(), lr=CONFIG['TRAINING']['LR'],weight_decay=CONFIG['TRAINING']['WEIGHT_DECAY'])
-    #optimizer = torch.optim.SGD(model.parameters(), lr=CONFIG['TRAINING']['LR'],weight_decay=CONFIG['TRAINING']['WEIGHT_DECAY'])
-    optimizer = torch.optim.SGD(model.parameters(), lr = 0.001, momentum=0.9, weight_decay = CONFIG['TRAINING']['WEIGHT_DECAY'])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=2,threshold_mode='abs',min_lr=1e-8, verbose=True)
-    infer_model = train(train_loader, model, optimizer, scheduler= None, device=device)
+#optimizer = torch.optim.Adagrad(model.parameters(), lr=CONFIG['TRAINING']['LR'],weight_decay=CONFIG['TRAINING']['WEIGHT_DECAY'])
+#optimizer = torch.optim.SGD(model.parameters(), lr=CONFIG['TRAINING']['LR'],weight_decay=CONFIG['TRAINING']['WEIGHT_DECAY'])
+optimizer = torch.optim.SGD(model.parameters(), lr = 0.001, momentum=0.9, weight_decay = CONFIG['TRAINING']['WEIGHT_DECAY'])
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=2,threshold_mode='abs',min_lr=1e-8, verbose=True)
+infer_model = train(train_loader, model, optimizer, scheduler= None, device=device)
 
-    #graph
-    plt.clf()
-    plt.plot(np.arange(1,len(val_acc_list)+1), train_acc_list, label = 'train_acc')
-    plt.plot(np.arange(1,len(val_acc_list)+1), val_acc_list, label = 'val_acc')
-    plt.plot(np.arange(1,len(val_acc_list)+1), test_acc_list, label = 'test_acc')
-    plt.legend()
-    plt.savefig(f'./output/kfold/{str(label)}/acc_graph.png')
-    plt.clf()
+#graph
+plt.clf()
+plt.plot(np.arange(1,len(val_acc_list)+1), train_acc_list, label = 'train_acc')
+plt.plot(np.arange(1,len(val_acc_list)+1), val_acc_list, label = 'val_acc')
+plt.plot(np.arange(1,len(val_acc_list)+1), test_acc_list, label = 'test_acc')
+plt.legend()
+plt.savefig(f'./output/acc_graph.png')
+plt.clf()
 
-    plt.plot(np.arange(1,len(val_acc_list)+1), train_loss_list, label = 'train_loss')
-    plt.plot(np.arange(1,len(val_acc_list)+1), val_loss_list, label = 'val_loss')
-    plt.plot(np.arange(1,len(val_acc_list)+1), test_loss_list, label = 'test_loss')
-    plt.legend()
-    plt.savefig(f'./output/kfold/{str(label)}/loss_graph.png')
-    plt.clf()
+plt.plot(np.arange(1,len(val_acc_list)+1), train_loss_list, label = 'train_loss')
+plt.plot(np.arange(1,len(val_acc_list)+1), val_loss_list, label = 'val_loss')
+plt.plot(np.arange(1,len(val_acc_list)+1), test_loss_list, label = 'test_loss')
+plt.legend()
+plt.savefig(f'./output/loss_graph.png')
+plt.clf()
 
-    # Evaluate model on validation set
-    val_top1, val_top2, val_top5, val_loss, val_ClassTPDic = validation(val_loader, model, set='Validation')
-    test_top1, test_top2, test_top5, test_loss, test_ClassTPDic = inference(test_loader, model, set='Test')
-    
-    with open(f"output/kfold/{label}/output.txt", "a") as f:
-        f.write(f'\n')
-        f.write(f'Best model: Val Loss {val_loss:.5f} Val ACC {val_top1:.5f}\n')
-        f.write(f'Best model: Test Loss {test_loss:.5f} Test ACC {test_top1:.5f}\n')
+# Evaluate model on validation set
+val_top1, val_top2, val_top5, val_loss, val_ClassTPDic = validation(val_loader, model, set='Validation')
+test_top1, test_top2, test_top5, test_loss, test_ClassTPDic = inference(test_loader, model, set='Test')
+
+with open(f"output/output.txt", "a") as f:
+    f.write(f'\n')
+    f.write(f'Best model: Val Loss {val_loss:.5f} Val ACC {val_top1:.5f}\n')
+    f.write(f'Best model: Test Loss {test_loss:.5f} Test ACC {test_top1:.5f}\n')
 
 
-    # Print complete evaluation information
-    print('-' * 65)
-    print('Evaluation statistics:')
+# Print complete evaluation information
+print('-' * 65)
+print('Evaluation statistics:')
 
-    print('Validation results: Loss {val_loss:.3f}, Prec@1 {top1:.3f}, Prec@2 {top2:.3f}, Prec@5 {top5:.3f}'.format(val_loss=val_loss, top1=val_top1, top2=val_top2, top5=val_top5))
+print('Validation results: Loss {val_loss:.3f}, Prec@1 {top1:.3f}, Prec@2 {top2:.3f}, Prec@5 {top5:.3f}'.format(val_loss=val_loss, top1=val_top1, top2=val_top2, top5=val_top5))
+torch.save(infer_model, f'./output/model.pth')

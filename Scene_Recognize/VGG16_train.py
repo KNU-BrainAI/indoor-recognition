@@ -37,9 +37,6 @@ def seed_everything(seed):
 
 seed_everything(42) # Seed 고정
 
-
-
-
 def process_segmentation_output(segmentation_output, gray_images, batch_size, threshold=0.3):
     # 확률 임계값보다 높은 부분만 남기고, 나머지는 0으로 설정
     thresholded_output = torch.where(segmentation_output > threshold, torch.tensor(1.0).cuda(), torch.tensor(0.0).cuda())
@@ -135,8 +132,6 @@ def train(dataloader, model, optimizer, scheduler= None, device = 'cuda'):
                 'optimizer_state_dict': optimizer.state_dict(),
                 'epoch': epoch
             }
-            #torch.save(best_model, f'./output/kfold/{label}/model_epoch_{epoch}_case_{label}_val.pth')
-            flag = 1
             patient = 0
         else:
             patient+=1
@@ -153,9 +148,6 @@ def train(dataloader, model, optimizer, scheduler= None, device = 'cuda'):
                 'optimizer_state_dict': optimizer.state_dict(),
                 'epoch': epoch
             }
-            #if flag !=1:
-            #    torch.save(best_model, f'./output/kfold/{label}/model_epoch_{epoch}_case_{label}_test.pth')
-        flag = 0
         print(f'Patient: {patient}')
         with open(f"output/kfold_VGG16_colort/{label}/output.txt", "a") as f:
             f.write(f'Epoch {epoch} Train Loss {_train_loss:.5f} Train ACC {top1.avg:.5f}\n')
@@ -174,8 +166,6 @@ def validation(dataloader, model, set):
     ClassTPs_Top1 = torch.zeros(1, len(classes), dtype=torch.uint8).cuda()
     ClassTPs_Top2 = torch.zeros(1, len(classes), dtype=torch.uint8).cuda()
     ClassTPs_Top5 = torch.zeros(1, len(classes), dtype=torch.uint8).cuda()
-    Predictions = np.zeros(len(dataloader))
-    SceneGTLabels = np.zeros(len(dataloader))
 
     model.eval()
 
@@ -183,8 +173,6 @@ def validation(dataloader, model, set):
     batch_size = CONFIG['VALIDATION']['BATCH_SIZE']['VAL']
 
     # Start data time
-    data_time_start = time.time()
-
     with torch.no_grad():
         for i, (mini_batch) in enumerate(dataloader):
             start_time = time.time()
@@ -232,8 +220,6 @@ def validation(dataloader, model, set):
         ClassTPDic = {'Top1': ClassTPs_Top1.cpu().numpy(),
                       'Top2': ClassTPs_Top2.cpu().numpy(), 'Top5': ClassTPs_Top5.cpu().numpy()}
 
-        #print('Elapsed time for {} set evaluation {time:.3f} seconds'.format(set, time=time.time() - data_time_start))
-        #print("")
 
         return top1.avg, top2.avg, top5.avg, losses.avg, ClassTPDic
 
@@ -247,14 +233,11 @@ def inference(dataloader, model, set):
     ClassTPs_Top1 = torch.zeros(1, len(classes), dtype=torch.uint8).cuda()
     ClassTPs_Top2 = torch.zeros(1, len(classes), dtype=torch.uint8).cuda()
     ClassTPs_Top5 = torch.zeros(1, len(classes), dtype=torch.uint8).cuda()
-    Predictions = np.zeros(len(dataloader))
-    SceneGTLabels = np.zeros(len(dataloader))
     
     # Extract batch size
     batch_size = CONFIG['TEST']['BATCH_SIZE']['TEST']
 
     # Start data time
-    data_time_start = time.time()
     model.to(device)
 
     model.eval()
@@ -305,13 +288,7 @@ def inference(dataloader, model, set):
 
         ClassTPDic = {'Top1': ClassTPs_Top1.cpu().numpy(),
                       'Top2': ClassTPs_Top2.cpu().numpy(), 'Top5': ClassTPs_Top5.cpu().numpy()}
-
-        #print('Elapsed time for {} set evaluation {time:.3f} seconds'.format(set, time=time.time() - data_time_start))
-        #print("")
-
-        #TODO: precision값들 정리하는게 필요
-        #original_scene = [8,11,8,11,10,10,10,12,11,10]
-    
+  
         return top1.avg, top2.avg, top5.avg, losses.avg, ClassTPDic
 
 def initial_setting():
@@ -370,107 +347,91 @@ def initial_dataloader(label):
     
     return train_dataset, train_loader, val_dataset, val_loader, test_dataset, test_loader
 
-for label in range(1,7):
-    train_acc_list = []
-    train_loss_list = []
-    val_acc_list = []
-    val_loss_list = []
-    test_acc_list = []
-    test_loss_list = []
-    model, device, USE_CUDA = initial_setting()
-    train_dataset, train_loader, val_dataset, val_loader, test_dataset, test_loader = initial_dataloader(label)
+train_acc_list = []
+train_loss_list = []
+val_acc_list = []
+val_loss_list = []
+test_acc_list = []
+test_loss_list = []
+model, device, USE_CUDA = initial_setting()
+train_dataset, train_loader, val_dataset, val_loader, test_dataset, test_loader = initial_dataloader(label)
 
-    data_root = CONFIG['DATASET']['ROOT']
+data_root = CONFIG['DATASET']['ROOT']
 
-    print(f'data_root: {data_root}')
-    classes = train_dataset.classes
+classes = train_dataset.classes
 
-    # Print dataset information
-    print('Dataset loaded!')
-    print('Dataset Information:')
-    print('Train set. Size {}. Batch size {}. Nbatches {}'
-        .format(len(train_loader) * CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'], CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'], len(train_loader)))
-    print('Validation set. Size {}. Batch size {}. Nbatches {}'
-        .format(len(val_loader) * CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], len(val_loader)))
-    print('Test set. Size {}. Batch size {}. Nbatches {}'
-        .format(len(test_loader) * CONFIG['TEST']['BATCH_SIZE']['TEST'], CONFIG['TEST']['BATCH_SIZE']['TEST'], len(val_loader)))
-    print('Train set number of scenes: {}' .format(len(classes)))
-    print('Validation set number of scenes: {}' .format(len(classes)))
-    print('Test set number of scenes: {}' .format(len(classes)))
+# Print dataset information
+print('Dataset loaded!')
+print('Dataset Information:')
+print('Train set. Size {}. Batch size {}. Nbatches {}'
+    .format(len(train_loader) * CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'], CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'], len(train_loader)))
+print('Validation set. Size {}. Batch size {}. Nbatches {}'
+    .format(len(val_loader) * CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], CONFIG['VALIDATION']['BATCH_SIZE']['VAL'], len(val_loader)))
+print('Test set. Size {}. Batch size {}. Nbatches {}'
+    .format(len(test_loader) * CONFIG['TEST']['BATCH_SIZE']['TEST'], CONFIG['TEST']['BATCH_SIZE']['TEST'], len(val_loader)))
+print('Train set number of scenes: {}' .format(len(classes)))
+print('Validation set number of scenes: {}' .format(len(classes)))
+print('Test set number of scenes: {}' .format(len(classes)))
 
-    print('-' * 65)
+print('-' * 65)
 
-    print('Computing histogram of scene classes...')
+print('Computing histogram of scene classes...')
 
-    # Check if OUTPUT_DIR exists and if not create it
-    if not os.path.exists(CONFIG['EXP']['OUTPUT_DIR']):
-        os.makedirs(CONFIG['EXP']['OUTPUT_DIR'])
+# Check if OUTPUT_DIR exists and if not create it
+if not os.path.exists(CONFIG['EXP']['OUTPUT_DIR']):
+    os.makedirs(CONFIG['EXP']['OUTPUT_DIR'])
 
-    # Print Network information
-    print('-' * 65)
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    print('Number of params: {}'. format(params))
-    print('-' * 65)
-    print('GPU in use: {} with {} memory'.format(torch.cuda.get_device_name(0), torch.cuda.max_memory_allocated(0)))
-    print('-' * 65)
+# Print Network information
+print('-' * 65)
+model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+params = sum([np.prod(p.size()) for p in model_parameters])
+print('Number of params: {}'. format(params))
+print('-' * 65)
+print('GPU in use: {} with {} memory'.format(torch.cuda.get_device_name(0), torch.cuda.max_memory_allocated(0)))
+print('-' * 65)
 
-    # Summary of the network for a dummy input
-    sample = next(iter(val_loader))
-    torchsummary.summary(model, [(3, 224, 224)], batch_size=CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'])
+# Summary of the network for a dummy input
+sample = next(iter(val_loader))
+torchsummary.summary(model, [(3, 224, 224)], batch_size=CONFIG['VALIDATION']['BATCH_SIZE']['TRAIN'])
 
-    print('Evaluating dataset ...')
+print('Evaluating dataset ...')
 
-    #optimizer = torch.optim.Adagrad(model.parameters(), lr=CONFIG['TRAINING']['LR'],weight_decay=CONFIG['TRAINING']['WEIGHT_DECAY'])
-    #optimizer = torch.optim.SGD(model.parameters(), lr=CONFIG['TRAINING']['LR'],weight_decay=CONFIG['TRAINING']['WEIGHT_DECAY'])
-    #optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay= 0.9)
-    loss_fn = nn.CrossEntropyLoss()
-    
-    optimizer = torch.optim.SGD(model.parameters(), lr = 0.001, momentum=0.9, weight_decay = CONFIG['TRAINING']['WEIGHT_DECAY'])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2,threshold_mode='abs',min_lr=1e-8, verbose=True)
-    infer_model = train(train_loader, model, optimizer, scheduler= None, device=device)
+loss_fn = nn.CrossEntropyLoss()
 
-    #graph
-    plt.clf()
-    plt.plot(np.arange(1,len(val_acc_list)+1), train_acc_list, label = 'train_acc')
-    plt.plot(np.arange(1,len(val_acc_list)+1), val_acc_list, label = 'val_acc')
-    plt.plot(np.arange(1,len(val_acc_list)+1), test_acc_list, label = 'test_acc')
-    plt.legend()
-    plt.savefig(f'./output/kfold_VGG16_RGB/{str(label)}/acc_graph.png')
-    plt.clf()
+optimizer = torch.optim.SGD(model.parameters(), lr = 0.001, momentum=0.9, weight_decay = CONFIG['TRAINING']['WEIGHT_DECAY'])
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2,threshold_mode='abs',min_lr=1e-8, verbose=True)
+infer_model = train(train_loader, model, optimizer, scheduler= None, device=device)
 
-    plt.plot(np.arange(1,len(val_acc_list)+1), train_loss_list, label = 'train_loss')
-    plt.plot(np.arange(1,len(val_acc_list)+1), val_loss_list, label = 'val_loss')
-    plt.plot(np.arange(1,len(val_acc_list)+1), test_loss_list, label = 'test_loss')
-    plt.legend()
-    plt.savefig(f'./output/kfold_VGG16_RGB/{str(label)}/loss_graph.png')
-    plt.clf()
+#graph
+plt.clf()
+plt.plot(np.arange(1,len(val_acc_list)+1), train_acc_list, label = 'train_acc')
+plt.plot(np.arange(1,len(val_acc_list)+1), val_acc_list, label = 'val_acc')
+plt.plot(np.arange(1,len(val_acc_list)+1), test_acc_list, label = 'test_acc')
+plt.legend()
+plt.savefig(f'./output/acc_graph.png')
+plt.clf()
 
-    # Evaluate model on validation set
-    val_top1, val_top2, val_top5, val_loss, val_ClassTPDic = validation(val_loader, model, set='Validation')
-    test_top1, test_top2, test_top5, test_loss, test_ClassTPDic = inference(test_loader, model, set='Test')
-    
-    with open(f"output/kfold_VGG16_RGB/{label}/output.txt", "a") as f:
-        f.write(f'\n')
-        f.write(f'Best model: Val Loss {val_loss:.5f} Val ACC {val_top1:.5f}\n')
-        f.write(f'Best model: Test Loss {test_loss:.5f} Test ACC {test_top1:.5f}\n')
+plt.plot(np.arange(1,len(val_acc_list)+1), train_loss_list, label = 'train_loss')
+plt.plot(np.arange(1,len(val_acc_list)+1), val_loss_list, label = 'val_loss')
+plt.plot(np.arange(1,len(val_acc_list)+1), test_loss_list, label = 'test_loss')
+plt.legend()
+plt.savefig(f'./output/loss_graph.png')
+plt.clf()
 
-    best_val_loss_list.append(val_loss)
-    best_test_loss_list.append(test_loss)
-    best_val_acc_list.append(val_top1)
-    best_test_acc_list.append(test_top1)
-    
+# Evaluate model on validation set
+val_top1, val_top2, val_top5, val_loss, val_ClassTPDic = validation(val_loader, model, set='Validation')
+test_top1, test_top2, test_top5, test_loss, test_ClassTPDic = inference(test_loader, model, set='Test')
 
-    # Print complete evaluation information
-    print('-' * 65)
-    print('Evaluation statistics:')
+with open(f"output/output.txt", "a") as f:
+    f.write(f'\n')
+    f.write(f'Best model: Val Loss {val_loss:.5f} Val ACC {val_top1:.5f}\n')
+    f.write(f'Best model: Test Loss {test_loss:.5f} Test ACC {test_top1:.5f}\n')
+
+# Print complete evaluation information
+print('-' * 65)
+print('Evaluation statistics:')
 
 
-    print('Validation results: Loss {val_loss:.3f}, Prec@1 {top1:.3f}, Prec@2 {top2:.3f}, Prec@5 {top5:.3f}'.format(val_loss=val_loss, top1=val_top1, top2=val_top2, top5=val_top5))
-    print('Test results: Loss {test_loss:.3f}, Prec@1 {top1:.3f}, Prec@2 {top2:.3f}, Prec@5 {top5:.3f}'.format(test_loss=test_loss, top1=test_top1, top2=test_top2, top5=test_top5))
-    torch.save(infer_model, f'./output/kfold_VGG16_RGB/{label}/model_case_{label}_val.pth')
-
-print(f"avg: val_acc = {sum(best_val_acc_list)/6}")
-print(f"avg: val_loss = {sum(best_val_loss_list)/6}")
-print(f"avg: test_acc = {sum(best_test_acc_list)/6}")
-print(f"avg: test_loss = {sum(best_test_loss_list)/6}")
+print('Validation results: Loss {val_loss:.3f}, Prec@1 {top1:.3f}, Prec@2 {top2:.3f}, Prec@5 {top5:.3f}'.format(val_loss=val_loss, top1=val_top1, top2=val_top2, top5=val_top5))
+print('Test results: Loss {test_loss:.3f}, Prec@1 {top1:.3f}, Prec@2 {top2:.3f}, Prec@5 {top5:.3f}'.format(test_loss=test_loss, top1=test_top1, top2=test_top2, top5=test_top5))
+torch.save(infer_model, f'./output/model.pth')
